@@ -1,0 +1,109 @@
+#include "he_edit.hejs"
+#include "he_http.hejs"
+
+var nFormat = Application.RegisterImageString(
+'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACJElEQVR4Xp2Q60vTYRTHz8soukkVEZBL \
+ okzJdKnNMCujEJwkCWVlAUFQURhAROXUKVT+CZVQQYBzCUnrhsmS3Ga7uai08FXvLNjlL/h0Hp79gIKg \
+ OvDhXJ7z/XJ45P2AJxfrqyfqq/snjMZoxRQsDMK8H+YMA1oPOhR7g9P77a5qjFaMG59uQGAFjCxXNAdK \
+ ILjO5pGVmlfDqNPbPT5ex2gl2lMLmcuwOIETfJ+C4BqdhXGC4Npf+0w3qjUGuyB5FgBGS+DJegB7AUBg \
+ FYxttIC9aGwDZC45F6hBogsAnrogVAnPymG8rHjNW51vsm/OdeOlMHteDeodg04ACG2DV254Wa3sVKOt \
+ 8OOd82bJJmyfOUey12P/gPgxAHiughcVtn7tVjM1CW0B0LoKJurgTQPlPmHHoPC1t8kY6DChBtk4TpBN \
+ 6uJunCCXgkkPANtvCjP5dpKFThqGRA18upg+CVPNMN0G4X1aH4JIGxU9QoUKiHiVdlMTzx/nbkiI5Fut \
+ QazPA5+7INUByaM2pzup9AvRvJdo1kuNT6jp1T53hHthYXhacN8WFvoPINF+T8GYmEsMMZ+HWV8j1boQ \
+ zjVxPypMLu43MDwjPEgLtXeELypO+RsLolF11bv5THeL65ThiuGw68SFvaUdDbeEh3PC8AfLo3lhjxpf \
+ bHJ1XGstO220UoxlytLfWKK4m9Xk8TfLQa3NzL6p5i/D3TIkKFb8n+H+k/gnW3BYX48JNIoAAAAASUVO \
+ RK5CYII='
+);
+
+function createQueryString(textToFormat)
+{
+	var url = "";
+
+	if (readStorage("compress_option", false)) url += "compress_option=on&"; 
+	if (readStorage("add_spaces_option", true)) url += "add_spaces_option=on&"; 
+	if (readStorage("keep_vars_option", false)) url += "keep_vars_option=on&"; 
+	if (readStorage("all_exclude", false)) url += "all_exclude=on&"; 
+	if (readStorage("o_exclude", false)) url += "o_exclude=on&"; 
+	if (readStorage("ms_exclude", false)) url += "ms_exclude=on&"; 
+	if (readStorage("moz_exclude", false)) url += "moz_exclude=on&";
+ 
+	return url + 'css=' + escape(textToFormat);
+}
+
+function handleRequest(req) {
+	var sel = ActiveView.Selection;
+	if (sel.IsEmpty) sel = new Range(0, 0, ActiveDocument.LineCount - 1, ActiveDocument.GetLineLength(ActiveDocument.LineCount - 1));
+	ActiveView.Position = ActiveDocument.ReplaceText(sel, req.responseText, AddUndoActionType("Prefixr formatting"));
+}
+
+var vFormat = new Command("Prefixr.Format", "Format", "Format selected CSS using Prefixr.com", nFormat);
+vFormat.onExecute = function() {
+	var sel = ActiveView.Selection;
+
+	// if there is no selection, take current word range as selection
+	if ( sel.IsEmpty )
+		sel = new Range(0, 0, ActiveDocument.LineCount - 1, ActiveDocument.GetLineLength(ActiveDocument.LineCount - 1));
+
+	var textToFormat = ActiveDocument.GetText(sel);
+	if ( textToFormat !== "" )
+		sendRequest("http://www.prefixr.com/api/index.php", handleRequest, createQueryString(textToFormat));
+};
+vFormat.onEnabled = function() {
+	return ActiveDocument !== null && ActiveDocument.ReadOnly !== true && CurrentSyntax().IsInheritedFrom("css");
+};
+
+// register the command as global, to be able assign shortcuts to it
+Application.RegisterCommand(vFormat);
+
+////////////////////////////////////////////////////////////////////////
+// Initialize HTML Toolbar
+Application.onInitToolbars = function (){
+	var MyToolbar = this.GetToolBar("Prefixr", true);
+	MyToolbar.Name = "Prefixr Tools";
+	MyToolbar.AddButton(vFormat);
+};
+
+function onOptionsInit()
+{
+	// read "setting" from persistent storage
+	this.Parameters.compress_option   = readStorage("compress_option", false);
+	this.Parameters.add_spaces_option = readStorage("add_spaces_option", true);
+	this.Parameters.keep_vars_option  = readStorage("keep_vars_option", false);
+	
+	this.Parameters.all_exclude       = readStorage("all_exclude", false);
+	this.Parameters.o_exclude         = readStorage("o_exclude", false);
+	this.Parameters.ms_exclude        = readStorage("ms_exclude", false);
+	this.Parameters.moz_exclude       = readStorage("moz_exclude", false);
+
+	this.Layout =
+	'@<dialog> \
+	<groupbox title="Formatting"> \
+		<checkbox title="Compress code" id="compress_option"/> \
+		<checkbox title="Add Line Break after CSS3 properties" id="add_spaces_option"/> \
+		<checkbox title="Don not convert variables" id="keep_vars_option"/> \
+	</groupbox> \
+	<groupbox title="Exclude"> \
+		<checkbox title="All (Only display the official syntax)" id="all_exclude"/> \
+		<checkbox title="-o" id="o_exclude"/> \
+		<checkbox title="-ms" id="ms_exclude"/> \
+		<checkbox title="-moz" id="moz_exclude"/> \
+	</groupbox> \
+	</dialog>@';
+}
+
+function onOptionsApply()
+{
+	// store new "setting" value in persistent storage
+	var vStorage = GetStorage(eStorageTypeWorkspace, "", eAccessTypeWrite);
+	vStorage.compress_option   = this.Parameters.compress_option;
+	vStorage.add_spaces_option = this.Parameters.add_spaces_option;
+	vStorage.keep_vars_option  = this.Parameters.keep_vars_option;
+
+	vStorage.all_exclude       = this.Parameters.all_exclude;
+	vStorage.o_exclude         = this.Parameters.o_exclude;
+	vStorage.ms_exclude        = this.Parameters.ms_exclude;
+	vStorage.moz_exclude       = this.Parameters.moz_exclude;
+}
+
+Application.RegisterOptionsPage("PrefixR", onOptionsInit, onOptionsApply);
+Application.AddScriptInfo("0ACAC468-2AAE-4478-863D-A6B5FDCBC773", "Prefixr", "1.0.0.3", "Prefixr Cross-Browser CSS Formatter for HippoEDIT", "HippoEDIT", "supportbox@hippoedit.com", "http://wiki.hippoedit.com/plugins/prefixr");
